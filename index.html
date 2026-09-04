@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>CRISPR Interactive 3D - 360° View Control</title>
+  <style>
+    * { box-sizing: border-box; }
+    body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #050814; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    #canvas-container { width: 100vw; height: 100vh; position: absolute; top:0; left:0; }
+    
+    /* Left Sidebar Container */
+    #sidebar {
+      position: absolute; top: 20px; left: 20px; width: 340px; max-height: calc(100vh - 40px);
+      z-index: 10; display: flex; flex-direction: column; gap: 12px; pointer-events: auto;
+      overflow-y: auto; padding-right: 4px;
+    }
+    
+    .card {
+      background: rgba(13, 20, 38, 0.88); backdrop-filter: blur(16px);
+      border: 1px solid rgba(0, 240, 255, 0.3); border-radius: 16px;
+      padding: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+    }
+    
+    #step-badge {
+      display: inline-block; background: linear-gradient(135deg, #00f0ff, #7000ff); color: #ffffff; font-weight: 800;
+      font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
+      padding: 4px 10px; border-radius: 10px; margin-bottom: 8px; box-shadow: 0 2px 8px rgba(0, 240, 255, 0.3);
+    }
+    #title { color: #ffffff; font-size: 17px; font-weight: 700; margin: 0 0 6px 0; }
+    #desc { color: #a0aec0; font-size: 12px; margin: 0 0 12px 0; line-height: 1.4; }
+    
+    .input-group {
+      display: flex; gap: 8px; margin-bottom: 12px; align-items: center;
+    }
+    .input-group label { color: #00f0ff; font-family: monospace; font-size: 11px; font-weight: bold; letter-spacing: 0.5px; }
+    .input-group input {
+      background: rgba(0, 240, 255, 0.1); border: 1.5px solid #00f0ff; color: #ffffff;
+      font-family: monospace; font-size: 14px; font-weight: bold; padding: 4px 8px;
+      border-radius: 6px; width: 90px; text-align: center; text-transform: uppercase;
+      outline: none; box-shadow: 0 0 8px rgba(0, 240, 255, 0.2);
+    }
+
+    /* Slider Container */
+    .slider-group {
+      display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;
+    }
+    .slider-label {
+      display: flex; justify-content: space-between; color: #00f0ff; font-family: monospace; font-size: 11px; font-weight: bold;
+    }
+    .slider-group input[type="range"] {
+      -webkit-appearance: none; width: 100%; height: 6px; border-radius: 3px;
+      background: rgba(0, 240, 255, 0.2); outline: none; border: 1px solid rgba(0, 240, 255, 0.4);
+    }
+    .slider-group input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%;
+      background: #00f0ff; cursor: pointer; box-shadow: 0 0 10px #00f0ff;
+    }
+    
+    .btn-container { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+    button {
+      background: linear-gradient(135deg, #00f0ff, #0066ff); border: none; color: #ffffff;
+      padding: 10px 16px; font-size: 12px; font-weight: 700; border-radius: 20px;
+      cursor: pointer; box-shadow: 0 4px 15px rgba(0, 240, 255, 0.3); width: 100%; transition: all 0.15s ease;
+    }
+    button.sec-btn { background: linear-gradient(135deg, #ff0077, #7000ff); box-shadow: 0 4px 15px rgba(255, 0, 119, 0.3); }
+    button.toggle-btn { background: rgba(0, 240, 255, 0.15); border: 1px solid rgba(0, 240, 255, 0.5); box-shadow: none; color: #00f0ff; }
+    button:hover { transform: translateY(-1px); filter: brightness(1.1); }
+    button:active { transform: scale(0.96); }
+
+    .legend-title { color: #ffffff; font-size: 12px; font-weight: bold; margin-bottom: 8px; }
+    .legend-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px; font-family: monospace; color: #d1d5db; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+    #match-tracker {
+      color: #00f0ff; font-family: monospace; font-size: 11px; font-weight: bold;
+      background: rgba(0, 240, 255, 0.08); border: 1px solid rgba(0, 240, 255, 0.3);
+      padding: 6px 10px; border-radius: 8px; text-align: center; margin-bottom: 10px;
+    }
+
+    #toast-notification {
+      position: absolute; top: 25px; right: 25px;
+      z-index: 20; padding: 12px 24px; border-radius: 12px; font-weight: bold; font-size: 14px;
+      text-align: center; color: #ffffff; opacity: 0; pointer-events: none;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.8); backdrop-filter: blur(10px);
+    }
+    #toast-notification.success { background: rgba(0, 230, 118, 0.9); border: 2px solid #00e676; opacity: 1; transform: scale(1); }
+    #toast-notification.error { background: rgba(255, 23, 68, 0.9); border: 2px solid #ff1744; opacity: 1; transform: scale(1); }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+  <div id="canvas-container"></div>
+  <div id="toast-notification">Notification</div>
+
+  <div id="sidebar">
+    <div class="card">
+      <div id="step-badge">Step 1 of 4</div>
+      <div id="title">1. The Search Engine 🔍</div>
+      <div class="input-group">
+        <label for="target-input">TARGET (5-BP):</label>
+        <input type="text" id="target-input" maxlength="5" value="ACCGT" onchange="updateTargetSeq(this.value)">
+      </div>
+      <div id="desc">Cas9 scans DNA for a magenta PAM (NGG) motif. Click when Cas9 aligns with the target sequence!</div>
+      <div id="match-tracker">PAM: OFF | Align: 0/5 BP</div>
+      <div class="btn-container" id="action-container">
+        <button id="action-btn" onclick="nextStep()">Lock On & Check PAM/Sequence ➔</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>🔄 360° CAMERA VIEW</span>
+          <span id="rotation-deg">0°</span>
+        </div>
+        <input type="range" id="rotation-slider" min="0" max="360" value="0" oninput="onSliderRotate(this.value)">
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="legend-title">Molecular Legend</div>
+      <div class="legend-grid">
+        <div><span class="dot" style="background:#ff2a6d"></span><b>Adenine (A)</b></div>
+        <div><span class="dot" style="background:#00f0ff"></span><b>Thymine (T)</b></div>
+        <div><span class="dot" style="background:#ffb703"></span><b>Guanine (G)</b></div>
+        <div><span class="dot" style="background:#00f5d4"></span><b>Cytosine (C)</b></div>
+        <div><span class="dot" style="background:#d800ff"></span><b>PAM Motif</b></div>
+        <div><span class="dot" style="background:#ff7b00"></span><b>gRNA Strand</b></div>
+      </div>
+    </div>
+
+    <button class="toggle-btn" onclick="toggleCas9()">👁️ Toggle Cas9 Visibility</button>
+  </div>
+
+  <script>
+    let audioCtx = null;
+    function initAudio() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function playClickSound() {
+      initAudio();
+      const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+      osc.type = 'sine'; osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.05);
+      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(); osc.stop(audioCtx.currentTime + 0.05);
+    }
+
+    function playErrorSound() {
+      initAudio();
+      const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+      osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+      osc.frequency.setValueAtTime(110, audioCtx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(); osc.stop(audioCtx.currentTime + 0.25);
+    }
+
+    function playZipTone(pitch) {
+      initAudio();
+      const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+      osc.type = 'sine'; osc.frequency.setValueAtTime(pitch, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(); osc.stop(audioCtx.currentTime + 0.12);
+    }
+
+    function playSuccessSound() {
+      initAudio();
+      const now = audioCtx.currentTime;
+      [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+        const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+        osc.type = 'triangle'; osc.frequency.setValueAtTime(freq, now + idx * 0.06);
+        gain.gain.setValueAtTime(0.2, now + idx * 0.06);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.06 + 0.25);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now + idx * 0.06); osc.stop(now + idx * 0.06 + 0.25);
+      });
+    }
+
+    function playDualCutSound() {
+      initAudio();
+      const now = audioCtx.currentTime;
+      [1400, 900].forEach((freq, idx) => {
+        const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(freq, now + idx * 0.1);
+        osc.frequency.exponentialRampToValueAtTime(100, now + idx * 0.1 + 0.2);
+        gain.gain.setValueAtTime(0.2, now + idx * 0.1); gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.1 + 0.2);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now + idx * 0.1); osc.stop(now + idx * 0.1 + 0.2);
+      });
+    }
+
+    let toastTimeout = null;
+    function showToast(text, type) {
+      const toast = document.getElementById('toast-notification');
+      toast.innerText = text; toast.className = type;
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => { toast.className = ''; }, 2400);
+    }
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x050814, 0.018);
+
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const defaultCamPos = new THREE.Vector3(2, 2, 28);
+    const targetCamPos = defaultCamPos.clone();
+    camera.position.copy(defaultCamPos);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(2, 0, 0);
+
+    // Sync Slider with Manual Orbit Dragging
+    let isUserSliderDragging = false;
+    controls.addEventListener('change', () => {
+      if (!isUserSliderDragging) {
+        let angle = Math.atan2(camera.position.x - controls.target.x, camera.position.z - controls.target.z);
+        let degrees = Math.round(angle * (180 / Math.PI));
+        if (degrees < 0) degrees += 360;
+        document.getElementById('rotation-slider').value = degrees;
+        document.getElementById('rotation-deg').innerText = degrees + '°';
+      }
+    });
+
+    function onSliderRotate(val) {
+      isUserSliderDragging = true;
+      const deg = parseFloat(val);
+      document.getElementById('rotation-deg').innerText = Math.round(deg) + '°';
+      
+      const rad = deg * (Math.PI / 180);
+      const dx = camera.position.x - controls.target.x;
+      const dz = camera.position.z - controls.target.z;
+      const radius = Math.sqrt(dx * dx + dz * dz);
+
+      camera.position.x = controls.target.x + radius * Math.sin(rad);
+      camera.position.z = controls.target.z + radius * Math.cos(rad);
+      targetCamPos.copy(camera.position);
+      controls.update();
+
+      setTimeout(() => { isUserSliderDragging = false; }, 50);
+    }
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    const pLight1 = new THREE.PointLight(0x00f0ff, 2.5, 90); pLight1.position.set(12, 12, 12); scene.add(pLight1);
+    const pLight2 = new THREE.PointLight(0xff0077, 2.0, 90); pLight2.position.set(-12, -12, -12); scene.add(pLight2);
+
+    const pGeo = new THREE.BufferGeometry();
+    const pCount = 300, pPos = new Float32Array(pCount * 3);
+    for(let i = 0; i < pCount * 3; i++) pPos[i] = (Math.random() - 0.5) * 60;
+    pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+    scene.add(new THREE.Points(pGeo, new THREE.PointsMaterial({ size: 0.15, color: 0x00f0ff, transparent: true, opacity: 0.6 })));
+
+    const burstGeo = new THREE.BufferGeometry();
+    const burstCount = 60, burstPos = new Float32Array(burstCount * 3), burstVel = [];
+    for(let i = 0; i < burstCount; i++) {
+      burstPos[i*3] = 0; burstPos[i*3+1] = 0; burstPos[i*3+2] = 0;
+      burstVel.push(new THREE.Vector3((Math.random()-0.5)*0.8, (Math.random()-0.5)*0.8, (Math.random()-0.5)*0.8));
+    }
+    burstGeo.setAttribute('position', new THREE.BufferAttribute(burstPos, 3));
+    const burstMat = new THREE.PointsMaterial({ size: 0.45, color: 0xff0077, transparent: true, opacity: 0 });
+    const burstParticles = new THREE.Points(burstGeo, burstMat);
+    scene.add(burstParticles);
+
+    const baseMap = { 'A': 0, 'T': 1, 'G': 2, 'C': 3 };
+    const baseColors = [0xff2a6d, 0x00f0ff, 0xffb703, 0x00f5d4];
+    const baseLetters = ["A", "T", "G", "C"];
+    const targetSeqIndices = [18, 19, 20, 21, 22]; 
+    const pamIndices = [16, 17];
+    let currentTargetStr = "ACCGT";
+
+    function createTextSprite(text) {
+      const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = "#ffffff"; ctx.font = 'Bold 84px Arial';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.strokeStyle = "#000000"; ctx.lineWidth = 8;
+      ctx.strokeText(text, 64, 64); ctx.fillText(text, 64, 64);
+      const texture = new THREE.CanvasTexture(canvas);
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
+      sprite.scale.set(1.4, 1.4, 1);
+      return sprite;
+    }
+
+    function createBaseMesh(baseChar, material) {
+      const group = new THREE.Group();
+      if (baseChar === 'A' || baseChar === 'G') {
+        const hex = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.3, 6), material);
+        const pent = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.3, 5), material);
+        pent.position.x = 0.55; group.add(hex); group.add(pent);
+      } else {
+        const hex = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.3, 6), material);
+        group.add(hex);
+      }
+      group.rotation.x = Math.PI / 2;
+      return group;
+    }
+
+    const numPairs = 40, helixRadius = 2.5, helixHeight = 36;
+    const leftStrand = [], rightStrand = [], rungs = [];
+    const dnaGroup = new THREE.Group();
+
+    for (let i = 0; i < numPairs; i++) {
+      const y = (i / numPairs) * helixHeight - helixHeight / 2;
+      const angle = i * 0.45;
+      
+      const isTarget = targetSeqIndices.includes(i);
+      const isPam = pamIndices.includes(i);
+      const targetChar = isTarget ? currentTargetStr[targetSeqIndices.indexOf(i)] : (isPam ? 'G' : baseLetters[i % 4]);
+      const baseIdx = baseMap[targetChar] !== undefined ? baseMap[targetChar] : (i % 4);
+      const complementIdx = baseIdx === 0 ? 1 : baseIdx === 1 ? 0 : baseIdx === 2 ? 3 : 2;
+
+      const matColor1 = isPam ? 0xd800ff : baseColors[baseIdx];
+      const mat1 = new THREE.MeshPhongMaterial({ color: matColor1, shininess: 80 });
+      const mat2 = new THREE.MeshPhongMaterial({ color: baseColors[complementIdx], shininess: 80 });
+
+      const b1 = createBaseMesh(targetChar, mat1);
+      b1.position.set(Math.cos(angle) * helixRadius, y, Math.sin(angle) * helixRadius);
+      b1.rotation.y = -angle;
+      const label1 = createTextSprite(isPam ? "PAM" : targetChar); b1.add(label1);
+      dnaGroup.add(b1); leftStrand.push({ mesh: b1, label: label1, origY: y, origAngle: angle, idx: i, mat: mat1 });
+
+      const b2 = createBaseMesh(baseLetters[complementIdx], mat2);
+      b2.position.set(Math.cos(angle + Math.PI) * helixRadius, y, Math.sin(angle + Math.PI) * helixRadius);
+      b2.rotation.y = -(angle + Math.PI);
+      const label2 = createTextSprite(baseLetters[complementIdx]); b2.add(label2);
+      dnaGroup.add(b2); rightStrand.push({ mesh: b2, label: label2, origY: y, origAngle: angle + Math.PI, idx: i, mat: mat2 });
+
+      const rungGeo = new THREE.CylinderGeometry(0.08, 0.08, helixRadius * 2, 8);
+      const rungMat = new THREE.MeshPhongMaterial({ color: matColor1, shininess: 80 });
+      const rung = new THREE.Mesh(rungGeo, rungMat);
+      rung.position.set(0, y, 0); rung.rotation.z = Math.PI / 2; rung.rotation.y = -angle;
+      dnaGroup.add(rung); rungs.push({ mesh: rung, origY: y, idx: i, mat: rungMat });
+    }
+    scene.add(dnaGroup);
+
+    function updateTargetSeq(str) {
+      playClickSound();
+      str = str.toUpperCase().replace(/[^ATGC]/g, '');
+      if(str.length < 5) str = (str + "ACCGT").slice(0, 5);
+      currentTargetStr = str;
+      document.getElementById('target-input').value = str;
+
+      targetSeqIndices.forEach((seqIdx, idx) => {
+        const char = currentTargetStr[idx];
+        const baseIdx = baseMap[char];
+
+        const leftParent = leftStrand[seqIdx].mesh.parent;
+        leftParent.remove(leftStrand[seqIdx].mesh);
+        leftStrand[seqIdx].mat = new THREE.MeshPhongMaterial({ color: baseColors[baseIdx], shininess: 80 });
+        const newB1 = createBaseMesh(char, leftStrand[seqIdx].mat);
+        newB1.position.copy(leftStrand[seqIdx].mesh.position);
+        newB1.rotation.copy(leftStrand[seqIdx].mesh.rotation);
+        const newL1 = createTextSprite(char); newB1.add(newL1);
+        leftParent.add(newB1); leftStrand[seqIdx].mesh = newB1; leftStrand[seqIdx].label = newL1;
+
+        rungs[seqIdx].mat.color.setHex(baseColors[baseIdx]);
+      });
+    }
+
+    const cas9Group = new THREE.Group();
+    const cas9Mat = new THREE.MeshPhongMaterial({ color: 0x7000ff, transparent: true, opacity: 0.65, shininess: 100 });
+    const cas9Body = new THREE.Mesh(new THREE.SphereGeometry(5.2, 32, 32), cas9Mat);
+    cas9Body.scale.set(1.4, 0.8, 1.1); cas9Group.add(cas9Body);
+
+    const grnaCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-2, -3, 0), new THREE.Vector3(-1, -1, 1.5),
+      new THREE.Vector3(0, 0, 2), new THREE.Vector3(1, 1, 1.5), new THREE.Vector3(2, 3, 0)
+    ]);
+    const grnaGeo = new THREE.TubeGeometry(grnaCurve, 20, 0.16, 8, false);
+    const grnaMat = new THREE.MeshPhongMaterial({ color: 0xff7b00, emissive: 0xcc5500, shininess: 100 });
+    const grnaMesh = new THREE.Mesh(grnaGeo, grnaMat); grnaMesh.scale.set(0, 0, 0);
+    cas9Group.add(grnaMesh);
+
+    const ruvcLaser = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 8, 16), new THREE.MeshBasicMaterial({ color: 0xff0077 }));
+    ruvcLaser.rotation.z = Math.PI / 2; ruvcLaser.position.set(-1.5, 0.5, 0); ruvcLaser.visible = false;
+    cas9Group.add(ruvcLaser);
+
+    const hnhLaser = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 8, 16), new THREE.MeshBasicMaterial({ color: 0x00f0ff }));
+    hnhLaser.rotation.z = Math.PI / 2; hnhLaser.position.set(1.5, -0.5, 0); hnhLaser.visible = false;
+    cas9Group.add(hnhLaser);
+
+    const scanningLaser = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 10, 16), new THREE.MeshBasicMaterial({ color: 0xff0077, transparent: true, opacity: 0.85 }));
+    scanningLaser.rotation.z = Math.PI / 2; cas9Group.add(scanningLaser);
+    scene.add(cas9Group);
+
+    function toggleCas9() { playClickSound(); cas9Group.visible = !cas9Group.visible; }
+
+    const donorGroup = new THREE.Group();
+    const donorMat = new THREE.MeshPhongMaterial({ color: 0x00ff88, emissive: 0x00aa55, shininess: 100 });
+    const donorPatch = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 4.5, 16), donorMat);
+    donorGroup.add(donorPatch); donorGroup.scale.set(0,0,0); scene.add(donorGroup);
+
+    let step = 0;
+    let scanSpeed = 1.0;
+    let slowDownTimer = 0;
+    let zipProgress = 0;
+
+    function renderStepUI() {
+      const actionContainer = document.getElementById('action-container');
+      if (step === 0) {
+        document.getElementById('step-badge').innerText = "Step 1 of 4";
+        document.getElementById('title').innerText = "1. The Search Engine 🔍";
+        document.getElementById('desc').innerText = "Cas9 scans DNA for a magenta PAM (NGG) motif. Click when Cas9 aligns with the target sequence!";
+        actionContainer.innerHTML = `<button id="action-btn" onclick="nextStep()">Lock On & Check PAM/Sequence ➔</button>`;
+      } else if (step === 1) {
+        document.getElementById('step-badge').innerText = "Step 2 of 4";
+        document.getElementById('title').innerText = "2. R-Loop Unwinding 🔑";
+        document.getElementById('desc').innerText = "Cas9 unwinds the DNA forming an R-Loop structure as gRNA zips base-by-base.";
+        actionContainer.innerHTML = `<button id="action-btn" onclick="nextStep()">Fire Cut Domains (RuvC & HNH) ✂️</button>`;
+      } else if (step === 2) {
+        document.getElementById('step-badge').innerText = "Step 3 of 4";
+        document.getElementById('title').innerText = "3. Molecular Scissors ✂️";
+        document.getElementById('desc').innerText = "Dual nuclease domains cleaved both strands! Select repair pathway:";
+        actionContainer.innerHTML = `
+          <button onclick="applyRepair('HDR')">HDR Repair (Insert Gene) 🧬</button>
+          <button class="sec-btn" onclick="applyRepair('NHEJ')">NHEJ Repair (Knockout) ⚡</button>
+        `;
+      } else if (step === 3) {
+        document.getElementById('step-badge').innerText = "Step 4 of 4";
+        document.getElementById('title').innerText = "4. Sequence Edited 🩹";
+        document.getElementById('desc').innerText = "Gene editing complete! Sequence successfully modified.";
+        actionContainer.innerHTML = `<button onclick="nextStep()">Restart Demo 🔄</button>`;
+      }
+    }
+
+    function triggerCleavageEffect() {
+      burstMat.opacity = 1.0;
+      const positions = burstParticles.geometry.attributes.position.array;
+      for(let i = 0; i < burstCount; i++) {
+        positions[i*3] = 0; positions[i*3+1] = 0; positions[i*3+2] = 0;
+      }
+      burstParticles.geometry.attributes.position.needsUpdate = true;
+    }
+
+    function nextStep() {
+      if (step === 0) {
+        const distanceToTarget = Math.abs(cas9Group.position.y - 0);
+        if (distanceToTarget < 2.5) {
+          playSuccessSound();
+          showToast("🎉 PAM Recognized! Target Sequence Matched!", "success");
+          step = 1; zipProgress = 0;
+          renderStepUI();
+          targetCamPos.set(2, 0, 18);
+        } else {
+          playErrorSound();
+          showToast("⚠️ PAM/Sequence Mismatch! Resuming Search...", "error");
+          scanSpeed = 0.2; slowDownTimer = 60;
+        }
+      } else if (step === 1) {
+        step = 2;
+        renderStepUI();
+        playDualCutSound();
+        ruvcLaser.visible = true; hnhLaser.visible = true;
+        setTimeout(() => { ruvcLaser.visible = false; hnhLaser.visible = false; }, 400);
+        triggerCleavageEffect();
+      } else if (step === 3) {
+        playClickSound();
+        step = 0;
+        renderStepUI();
+        donorGroup.scale.set(0,0,0);
+        cas9Mat.opacity = 0.65;
+        grnaMesh.scale.set(0,0,0);
+        targetCamPos.copy(defaultCamPos);
+        rungs.forEach(r => { r.mesh.scale.x = 1; r.mesh.material = r.mat; });
+      }
+    }
+
+    function applyRepair(type) {
+      step = 3;
+      renderStepUI();
+      playSuccessSound();
+      if (type === 'HDR') {
+        showToast("🧬 HDR Repair Complete: Green Donor Gene Inserted!", "success");
+      } else {
+        showToast("⚡ NHEJ Repair Complete: Gene Knocked Out!", "error");
+      }
+    }
+
+    let time = 0;
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      const tracker = document.getElementById('match-tracker');
+      
+      if (step === 0) {
+        if (slowDownTimer > 0) {
+          slowDownTimer--;
+          if (slowDownTimer === 0) scanSpeed = 1.0;
+        }
+        time += 0.025 * scanSpeed;
+        cas9Group.position.y = Math.sin(time) * 11;
+        dnaGroup.rotation.y += 0.005;
+
+        const nearTarget = Math.abs(cas9Group.position.y - 0) < 2.5;
+        tracker.innerText = `PAM: ${nearTarget ? 'DETECTED (NGG)' : 'SEARCHING'} | Align: ${nearTarget ? '5/5 BP (100%)' : '0/5 BP'}`;
+        tracker.style.color = nearTarget ? '#00f5d4' : '#00f0ff';
+      }
+
+      controls.update();
+      if (!isUserSliderDragging) {
+        camera.position.lerp(targetCamPos, 0.05);
+      }
+      scanningLaser.visible = (step === 0);
+
+      if (step === 1) {
+        cas9Group.position.y += (0 - cas9Group.position.y) * 0.1;
+        grnaMesh.scale.lerp(new THREE.Vector3(1,1,1), 0.08);
+
+        if(zipProgress < 5) {
+          zipProgress += 0.05;
+          if(Math.floor(zipProgress) > Math.floor(zipProgress - 0.05)) playZipTone(400 + zipProgress * 100);
+        }
+
+        targetSeqIndices.forEach((seqIdx) => {
+          const rightItem = rightStrand[seqIdx];
+          rightItem.mesh.position.x = Math.cos(rightItem.origAngle) * (helixRadius + 1.8);
+          rightItem.mesh.position.z = Math.sin(rightItem.origAngle) * (helixRadius + 1.8);
+        });
+      } else if (step === 2) {
+        leftStrand.forEach(p => p.mesh.position.y += ((p.idx >= 20 ? p.origY + 2.5 : p.origY - 2.5) - p.mesh.position.y) * 0.08);
+        rightStrand.forEach(p => p.mesh.position.y += ((p.idx >= 20 ? p.origY + 2.5 : p.origY - 2.5) - p.mesh.position.y) * 0.08);
+        rungs.forEach(r => {
+          if (targetSeqIndices.includes(r.idx)) r.mesh.scale.x = Math.max(0, r.mesh.scale.x - 0.05);
+          else r.mesh.position.y += ((r.idx >= 20 ? r.origY + 2.5 : r.origY - 2.5) - r.mesh.position.y) * 0.08;
+        });
+
+        if(burstMat.opacity > 0) {
+          burstMat.opacity -= 0.02;
+          const pos = burstParticles.geometry.attributes.position.array;
+          for(let i = 0; i < burstCount; i++) {
+            pos[i*3] += burstVel[i].x; pos[i*3+1] += burstVel[i].y; pos[i*3+2] += burstVel[i].z;
+          }
+          burstParticles.geometry.attributes.position.needsUpdate = true;
+        }
+      } else if (step === 3) {
+        cas9Mat.opacity = 0.15;
+        grnaMesh.scale.lerp(new THREE.Vector3(0,0,0), 0.08);
+        donorGroup.scale.lerp(new THREE.Vector3(1,1,1), 0.08);
+        leftStrand.forEach(p => p.mesh.position.y += (p.origY - p.mesh.position.y) * 0.08);
+        rightStrand.forEach(p => {
+          p.mesh.position.y += (p.origY - p.mesh.position.y) * 0.08;
+          p.mesh.position.x = Math.cos(p.origAngle) * helixRadius;
+          p.mesh.position.z = Math.sin(p.origAngle) * helixRadius;
+        });
+        rungs.forEach(r => {
+          r.mesh.position.y += (r.origY - r.mesh.position.y) * 0.08;
+          if (targetSeqIndices.includes(r.idx)) {
+            r.mesh.material = donorMat;
+            r.mesh.scale.x += (1 - r.mesh.scale.x) * 0.08;
+          }
+        });
+        dnaGroup.rotation.y += 0.008;
+      }
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
